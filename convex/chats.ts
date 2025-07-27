@@ -14,8 +14,8 @@ export const getChats = query({
       .order("desc")
       .collect();
 
-    const userChats = chats.filter(chat => 
-      chat.participants.includes(userId)
+    const userChats = chats.filter((chat) =>
+      chat.participants.includes(userId),
     );
 
     // Get last message for each chat
@@ -30,21 +30,21 @@ export const getChats = query({
         // Get other participants with their profiles
         const otherParticipants = await Promise.all(
           chat.participants
-            .filter(id => id !== userId)
+            .filter((id) => id !== userId)
             .map(async (id) => {
               const profile = await ctx.db
                 .query("profiles")
                 .withIndex("by_user", (q) => q.eq("userId", id))
                 .first();
-              
+
               if (!profile) return null;
-              
+
               return {
                 _id: id,
                 name: profile.name,
                 status: profile.status,
               };
-            })
+            }),
         );
 
         return {
@@ -52,7 +52,7 @@ export const getChats = query({
           lastMessage,
           otherParticipants: otherParticipants.filter(Boolean),
         };
-      })
+      }),
     );
 
     return chatsWithDetails;
@@ -69,11 +69,12 @@ export const createDirectChat = mutation({
 
     // Check if chat already exists
     const existingChats = await ctx.db.query("chats").collect();
-    const existingChat = existingChats.find(chat => 
-      chat.type === "direct" &&
-      chat.participants.length === 2 &&
-      chat.participants.includes(userId) &&
-      chat.participants.includes(args.participantId)
+    const existingChat = existingChats.find(
+      (chat) =>
+        chat.type === "direct" &&
+        chat.participants.length === 2 &&
+        chat.participants.includes(userId) &&
+        chat.participants.includes(args.participantId),
     );
 
     if (existingChat) {
@@ -116,11 +117,9 @@ export const getChatDetails = query({
     chatId: v.id("chats"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) return null;
-
     const chat = await ctx.db.get(args.chatId);
-    if (!chat || !chat.participants.includes(userId)) {
+
+    if (!chat) {
       return null;
     }
 
@@ -131,18 +130,20 @@ export const getChatDetails = query({
           .query("profiles")
           .withIndex("by_user", (q) => q.eq("userId", id))
           .first();
-        
+
+        console.log("Profile for participant", id, profile);
+
         if (!profile) return null;
-        
+
         return {
           _id: id,
           name: profile.name,
           status: profile.status,
           preferredLanguage: profile.preferredLanguage,
         };
-      })
+      }),
     );
-
+    console.log(participants);
     return {
       ...chat,
       participants: participants.filter(Boolean),

@@ -50,6 +50,8 @@ export function MessageBubble({ message, isOwn, currentUser, onReply }: MessageB
   const hasTranslation = message.translation && 
     message.translation.targetLanguage === currentUser.preferredLanguage &&
     message.translation.translatedText !== message.content;
+  
+  console.dir({currentUser})
 
   // Show translated text by default, original when showOriginal is true
   const displayContent = hasTranslation && !showOriginal

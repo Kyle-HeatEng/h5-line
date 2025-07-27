@@ -1,4 +1,9 @@
-import { query, mutation, internalAction, internalMutation } from "./_generated/server";
+import {
+  query,
+  mutation,
+  internalAction,
+  internalMutation,
+} from "./_generated/server";
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 import { api, internal } from "./_generated/api";
@@ -39,12 +44,14 @@ export const getMessages = query({
           .query("profiles")
           .withIndex("by_user", (q) => q.eq("userId", message.senderId))
           .first();
-        
+
         // Get translation if available
         const translation = await ctx.db
           .query("translations")
-          .withIndex("by_message_and_language", (q) => 
-            q.eq("messageId", message._id).eq("targetLanguage", currentUserProfile.preferredLanguage)
+          .withIndex("by_message_and_language", (q) =>
+            q
+              .eq("messageId", message._id)
+              .eq("targetLanguage", currentUserProfile.preferredLanguage),
           )
           .first();
 
@@ -55,11 +62,15 @@ export const getMessages = query({
           if (replyMessage) {
             const replySenderProfile = await ctx.db
               .query("profiles")
-              .withIndex("by_user", (q) => q.eq("userId", replyMessage.senderId))
+              .withIndex("by_user", (q) =>
+                q.eq("userId", replyMessage.senderId),
+              )
               .first();
-            replyToMessage = { 
-              ...replyMessage, 
-              sender: replySenderProfile ? { name: replySenderProfile.name } : null 
+            replyToMessage = {
+              ...replyMessage,
+              sender: replySenderProfile
+                ? { name: replySenderProfile.name }
+                : null,
             };
           }
         }
@@ -84,7 +95,7 @@ export const getMessages = query({
           replyToMessage,
           sticker,
         };
-      })
+      }),
     );
 
     return messagesWithDetails;
@@ -108,7 +119,7 @@ export const sendMessage = mutation({
     if (!chat || !chat.participants.includes(userId)) {
       throw new Error("Chat not found or access denied");
     }
-		console.log("editedfiles")
+    console.log("editedfiles");
 
     // Get user profile
     const profile = await ctx.db
@@ -136,20 +147,22 @@ export const sendMessage = mutation({
 
     // Schedule translation for other participants (only for text messages with content)
     if (args.type === "text" && args.content.trim()) {
-      await ctx.scheduler.runAfter(100, internal.messages.scheduleTranslations, {
+      await ctx.scheduler.runAfter(100, internal.messages.translateMessage, {
         messageId,
-        originalText: args.content,
         senderLanguage: profile.preferredLanguage,
-        chatId: args.chatId,
       });
     }
 
     // Handle assistant mention
     if (args.content.includes("@assistant")) {
-      await ctx.scheduler.runAfter(1000, internal.messages.handleAssistantMention, {
-        chatId: args.chatId,
-        messageId,
-      });
+      await ctx.scheduler.runAfter(
+        1000,
+        internal.messages.handleAssistantMention,
+        {
+          chatId: args.chatId,
+          messageId,
+        },
+      );
     }
 
     return messageId;
@@ -159,61 +172,75 @@ export const sendMessage = mutation({
 export const translateMessage = internalAction({
   args: {
     messageId: v.id("messages"),
-    originalText: v.string(),
     senderLanguage: v.string(),
-    targetLanguage: v.string(),
   },
   handler: async (ctx, args) => {
     console.log("=== TRANSLATION START ===");
     console.log("Message ID:", args.messageId);
-    console.log("Original text:", args.originalText);
-    console.log("Sender language:", args.senderLanguage);
-    
+
     // Get the message to verify it exists and get chat participants
-    const message = await ctx.runQuery(api.messages.getMessage, { messageId: args.messageId });
+    const message = await ctx.runQuery(api.messages.getMessage, {
+      messageId: args.messageId,
+    });
     if (!message) {
       console.log("Message not found for translation");
       return;
     }
 
-    const chat = await ctx.runQuery(api.chats.getChatDetails, { chatId: message.chatId });
+    const chat = await ctx.runQuery(api.chats.getChatDetails, {
+      chatId: message.chatId,
+    });
+    console.log(message, { depth: null });
     if (!chat) {
       console.log("Chat not found for translation");
       return;
     }
 
     // Get unique languages from participants (excluding sender's language)
-    const targetLanguages = [...new Set(
-      chat.participants
-        .filter(p => p !== null && p.preferredLanguage !== args.senderLanguage)
-        .map(p => p!.preferredLanguage)
-    )];
+    const targetLanguages = [
+      ...new Set(
+        chat.participants
+          .filter(
+            (p) => p !== null && p.preferredLanguage === args.senderLanguage,
+          )
+          .map((p) => p!.preferredLanguage),
+      ),
+    ];
 
     console.log("Target languages for translation:", targetLanguages);
 
     if (targetLanguages.length === 0) {
-      console.log("No target languages found - all participants have same language");
+      console.log(
+        "No target languages found - all participants have same language",
+      );
       return;
     }
 
     // Translate to each target language
     for (const targetLang of targetLanguages) {
       try {
-        console.log(`Translating "${args.originalText}" from ${args.senderLanguage} to ${targetLang}`);
-        const translatedText = await translateText(args.originalText, args.senderLanguage, targetLang);
+        const translatedText = await translateText(message.content, targetLang);
         console.log(`Translation result: "${translatedText}"`);
-        
+
         // Only save translation if it's different from original
-        if (translatedText && translatedText.toLowerCase().trim() !== args.originalText.toLowerCase().trim()) {
+        if (
+          translatedText &&
+          translatedText.toLowerCase().trim() !==
+            message.content.toLowerCase().trim()
+        ) {
           await ctx.runMutation(internal.messages.saveTranslation, {
             messageId: args.messageId,
             targetLanguage: targetLang,
             translatedText,
-            originalText: args.originalText,
+            originalText: message.content,
           });
-          console.log(`✅ Translation saved for ${targetLang}: "${translatedText}"`);
+          console.log(
+            `✅ Translation saved for ${targetLang}: "${translatedText}"`,
+          );
         } else {
-          console.log(`⚠️ No translation needed for ${targetLang} (same as original)`);
+          console.log(
+            `⚠️ No translation needed for ${targetLang} (same as original)`,
+          );
         }
       } catch (error) {
         console.error(`❌ Translation failed for ${targetLang}:`, error);
@@ -243,16 +270,22 @@ export const saveTranslation = internalMutation({
     // Check if translation already exists
     const existing = await ctx.db
       .query("translations")
-      .withIndex("by_message_and_language", (q) => 
-        q.eq("messageId", args.messageId).eq("targetLanguage", args.targetLanguage)
+      .withIndex("by_message_and_language", (q) =>
+        q
+          .eq("messageId", args.messageId)
+          .eq("targetLanguage", args.targetLanguage),
       )
       .first();
 
     if (!existing) {
       await ctx.db.insert("translations", args);
-      console.log(`Translation inserted for message ${args.messageId} in ${args.targetLanguage}`);
+      console.log(
+        `Translation inserted for message ${args.messageId} in ${args.targetLanguage}`,
+      );
     } else {
-      console.log(`Translation already exists for message ${args.messageId} in ${args.targetLanguage}`);
+      console.log(
+        `Translation already exists for message ${args.messageId} in ${args.targetLanguage}`,
+      );
     }
   },
 });
@@ -269,18 +302,23 @@ export const handleAssistantMention = internalAction({
       limit: 20,
     });
 
-    const chat = await ctx.runQuery(api.chats.getChatDetails, { chatId: args.chatId });
+    const chat = await ctx.runQuery(api.chats.getChatDetails, {
+      chatId: args.chatId,
+    });
     if (!chat) return;
 
     // Build context for assistant
     const context = messages
-      .filter(m => m.type === "text")
-      .map(m => `${m.sender?.name}: ${m.content}`)
+      .filter((m) => m.type === "text")
+      .map((m) => `${m.sender?.name}: ${m.content}`)
       .join("\n");
 
     try {
-      const response = await generateAssistantResponse(context, chat.name || "Direct Chat");
-      
+      const response = await generateAssistantResponse(
+        context,
+        chat.name || "Direct Chat",
+      );
+
       // Send assistant response
       await ctx.runMutation(internal.messages.sendAssistantMessage, {
         chatId: args.chatId,
@@ -320,7 +358,7 @@ export const sendAssistantMessage = internalMutation({
         status: "online",
         lastSeen: Date.now(),
       });
-      
+
       assistantProfile = await ctx.db.get(assistantProfileId);
     }
 
@@ -341,56 +379,57 @@ export const sendAssistantMessage = internalMutation({
 });
 
 // Helper functions for AI integration
-async function translateText(text: string, sourceLanguage: string, targetLanguage: string): Promise<string> {
+async function translateText(
+  text: string,
+  targetLanguage: string,
+): Promise<string> {
   // Map language codes to full language names
   const languageMap: Record<string, string> = {
-    'en': 'English',
-    'es': 'Spanish',
-    'fr': 'French',
-    'de': 'German',
-    'it': 'Italian',
-    'pt': 'Portuguese',
-    'ru': 'Russian',
-    'ja': 'Japanese',
-    'ko': 'Korean',
-    'zh': 'Chinese',
-    'ar': 'Arabic',
-    'hi': 'Hindi'
-  };
+    en: "English",
+    es: "Spanish",
+    fr: "French",
+    de: "German",
+    it: "Italian",
+    pt: "Portuguese",
+    ru: "Russian",
+    ja: "Japanese",
+    ko: "Korean",
+    zh: "Chinese",
+    ar: "Arabic",
+    hi: "Hindi",
+  } as const;
 
-  const sourceLanguageName = languageMap[sourceLanguage] || sourceLanguage;
   const targetLanguageName = languageMap[targetLanguage] || targetLanguage;
-
-  // Don't translate if source and target are the same
-  if (sourceLanguage === targetLanguage) {
-    return text;
-  }
 
   try {
     console.log(`🔄 Calling OpenAI API to translate "${text}"`);
     // Use the bundled OpenAI API
-    const response = await fetch(`${process.env.CONVEX_OPENAI_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${process.env.CONVEX_OPENAI_API_KEY}`,
-        "Content-Type": "application/json",
+    const response = await fetch(
+      `${process.env.CONVEX_OPENAI_BASE_URL}/chat/completions`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${process.env.CONVEX_OPENAI_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "gpt-4.1-nano",
+          messages: [
+            {
+              role: "system",
+              //TODO: open system prompt with language of the target in future
+              content: `You are a professional translator. Only return the translated text, nothing else. If the text is already in ${targetLanguageName} or if no translation is needed, return the original text unchanged.`,
+            },
+            {
+              role: "user",
+              content: text,
+            },
+          ],
+          max_tokens: 500,
+          temperature: 0.1,
+        }),
       },
-      body: JSON.stringify({
-        model: "gpt-4.1-nano",
-        messages: [
-          {
-            role: "system",
-            content: `You are a professional translator. Translate the following text from ${sourceLanguageName} to ${targetLanguageName}. Only return the translated text, nothing else. If the text is already in ${targetLanguageName} or if no translation is needed, return the original text unchanged.`
-          },
-          {
-            role: "user",
-            content: text
-          }
-        ],
-        max_tokens: 500,
-        temperature: 0.1,
-      }),
-    });
+    );
 
     console.log(`📡 API response status: ${response.status}`);
     if (!response.ok) {
@@ -398,7 +437,7 @@ async function translateText(text: string, sourceLanguage: string, targetLanguag
     }
 
     const data = await response.json();
-    
+
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error("Invalid response from translation API");
     }
@@ -413,28 +452,34 @@ async function translateText(text: string, sourceLanguage: string, targetLanguag
   }
 }
 
-async function generateAssistantResponse(context: string, chatName: string): Promise<string> {
-  const response = await fetch(`${process.env.CONVEX_OPENAI_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Authorization": `Bearer ${process.env.CONVEX_OPENAI_API_KEY}`,
-      "Content-Type": "application/json",
+async function generateAssistantResponse(
+  context: string,
+  chatName: string,
+): Promise<string> {
+  const response = await fetch(
+    `${process.env.CONVEX_OPENAI_BASE_URL}/chat/completions`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.CONVEX_OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "gpt-4.1-nano",
+        messages: [
+          {
+            role: "system",
+            content: `You are a helpful AI assistant in a chat called "${chatName}". You can see the conversation history and should respond helpfully and naturally. Keep responses concise and friendly.`,
+          },
+          {
+            role: "user",
+            content: `Recent conversation:\n${context}\n\nPlease respond to the conversation.`,
+          },
+        ],
+        max_tokens: 300,
+      }),
     },
-    body: JSON.stringify({
-      model: "gpt-4.1-nano",
-      messages: [
-        {
-          role: "system",
-          content: `You are a helpful AI assistant in a chat called "${chatName}". You can see the conversation history and should respond helpfully and naturally. Keep responses concise and friendly.`
-        },
-        {
-          role: "user",
-          content: `Recent conversation:\n${context}\n\nPlease respond to the conversation.`
-        }
-      ],
-      max_tokens: 300,
-    }),
-  });
+  );
 
   const data = await response.json();
   return data.choices[0].message.content.trim();
@@ -445,7 +490,11 @@ export const testTranslation = mutation({
   handler: async (ctx, args) => {
     const userId = await getAuthUserId(ctx);
     if (!userId) throw new Error("Not authenticated");
-    await ctx.scheduler.runAfter(100, internal.messages.testTranslateText, args);
+    await ctx.scheduler.runAfter(
+      100,
+      internal.messages.testTranslateText,
+      args,
+    );
     return "Translation scheduled";
   },
 });
@@ -454,7 +503,7 @@ export const testTranslateText = internalAction({
   args: { text: v.string(), targetLanguage: v.string() },
   handler: async (ctx, args) => {
     console.log("Testing translation:", args.text, "to", args.targetLanguage);
-    const result = await translateText(args.text, "en", args.targetLanguage);
+    const result = await translateText(args.text, args.targetLanguage);
     console.log("Translation result:", result);
     return result;
   },
