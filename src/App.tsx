@@ -35,6 +35,7 @@ export default function App() {
 
 function AuthenticatedApp() {
   const currentUser = useQuery(api.users.getCurrentUser);
+  console.log("is deploying too client")
 
   if (currentUser === undefined) {
     return (
