@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-light: #ffffff;
+  --color-dark: #171717;
+}
+
+.accent-text {
+  @apply text-slate-600;
+}
+
+body {
+  font-family:
+    "Inter Variable",
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    "Noto Sans",
+    sans-serif,
+    "Apple Color Emoji",
+    "Segoe UI Emoji",
+    "Segoe UI Symbol",
+    "Noto Color Emoji";
+  color: var(--color-dark);
+  background: var(--color-light);
+}
+
+/* only use this to update the style of the auth input fields. use a different class for all other input fields */
+.auth-input-field {
+  @apply w-full px-4 py-3 rounded-container bg-white border border-gray-200 focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-shadow shadow-sm hover:shadow;
+}
+
+/* only use this to update the style of the auth buttons. use the button class for all other buttons */
+.auth-button {
+  @apply w-full px-4 py-3 rounded bg-primary text-white font-semibold hover:bg-primary-hover transition-colors shadow-sm hover:shadow disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+/* LINE-specific styles */
+.line-bubble {
+  @apply rounded-2xl px-4 py-2 max-w-xs lg:max-w-md;
+}
+
+.line-bubble-own {
+  @apply bg-line-green text-white rounded-br-md;
+}
+
+.line-bubble-other {
+  @apply bg-white text-line-dark-gray shadow-sm rounded-bl-md;
+}
+
+.line-input {
+  @apply w-full px-4 py-3 rounded-full bg-line-light-gray border-none focus:ring-2 focus:ring-line-green outline-none transition-shadow;
+}
+
+.line-button {
+  @apply px-4 py-3 rounded-lg bg-line-green text-white font-semibold hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.line-header {
+  @apply h-16 bg-line-green flex items-center px-4 shadow-sm;
+}
+
+.line-status-online {
+  @apply bg-line-green;
+}
+
+.line-status-away {
+  @apply bg-line-yellow;
+}
+
+.line-status-offline {
+  @apply bg-line-gray;
+}
+
+/* Scrollbar styling */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #80868B #F1F3F4;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: #F1F3F4;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #80868B;
+  border-radius: 3px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: #202124;
+}
+
+/* Animation for message bubbles */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.message-bubble {
+  animation: slideInUp 0.2s ease-out;
+}
+
+/* Translation overlay effect */
+.translation-overlay {
+  backdrop-filter: blur(8px);
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #00C300;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+  .line-bubble {
+    @apply max-w-[280px];
+  }
+}
+
+/* Focus states for accessibility */
+.focus-visible:focus {
+  @apply outline-none ring-2 ring-line-green ring-offset-2;
+}
+
+/* Custom selection color */
+::selection {
+  background-color: #00C300;
+  color: white;
+}
+
+::-moz-selection {
+  background-color: #00C300;
+  color: white;
+}
